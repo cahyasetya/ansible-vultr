@@ -32,9 +32,9 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VULTR_VM_IP }} >> ~/.ssh/known_hosts
 
-      - name: Run Ansible playbook
+      - name: Run Ansible playbooks
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
           VULTR_VM_IP: ${{ secrets.VULTR_VM_IP }}
         run: |
-          ansible-playbook -i inventory.yml cloudflare-tunnel.yml
+          ansible-playbook -i inventory.yml provision.yml cloudflare-tunnel.yml
