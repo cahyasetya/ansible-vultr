@@ -1,0 +1,39 @@
+---
+- name: Provision Vultr VM
+  hosts: vultr-vm
+  become: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install basic packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+        state: present
+
+    - name: Install Python and related packages
+      apt:
+        name:
+          - python3
+          - python3-pip
+          - python3-venv
+          - python3-dev
+          - build-essential
+        state: present
+
+    - name: Verify Python installation
+      command: python3 --version
+      register: python_version
+      changed_when: false
+
+    - name: Display Python version
+      debug:
+        msg: "Python version installed: {{ python_version.stdout }}"

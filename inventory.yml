@@ -1,0 +1,8 @@
+all:
+  hosts:
+    vultr-vm:
+      ansible_host: 207.148.116.91
+      ansible_user: root
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3

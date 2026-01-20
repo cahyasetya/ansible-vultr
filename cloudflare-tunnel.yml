@@ -1,0 +1,80 @@
+---
+- name: Setup Cloudflare Tunnel
+  hosts: vultr-vm
+  become: yes
+
+  vars:
+    cloudflared_version: "2024.12.2"
+    # Local service URL to expose
+    local_service_url: "localhost:5001"
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - curl
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Add Cloudflare GPG key
+      shell: |
+        mkdir -p --mode=0755 /usr/share/keyrings
+        curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+      args:
+        creates: /usr/share/keyrings/cloudflare-main.gpg
+
+    - name: Add Cloudflare repository
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/cloudflared.list
+      args:
+        creates: /etc/apt/sources.list.d/cloudflared.list
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install cloudflared
+      apt:
+        name: cloudflared
+        state: present
+
+    - name: Create systemd service file for quick tunnel
+      copy:
+        dest: /etc/systemd/system/cloudflared-quick.service
+        content: |
+          [Unit]
+          Description=Cloudflare Quick Tunnel
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=root
+          ExecStart=/usr/bin/cloudflared tunnel --url {{ local_service_url }}
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+
+    - name: Enable and start cloudflared quick tunnel service
+      systemd:
+        name: cloudflared-quick
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Wait for tunnel to initialize
+      pause:
+        seconds: 5
+
+    - name: Get tunnel URL from logs
+      shell: journalctl -u cloudflared-quick -n 100 --no-pager | grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -1
+      register: tunnel_url
+      changed_when: false
+
+    - name: Display tunnel URL
+      debug:
+        msg: "Your free Cloudflare tunnel URL: {{ tunnel_url.stdout }}"
+      when: tunnel_url.stdout != ""
