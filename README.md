@@ -1,21 +1,30 @@
 # Ansible Vultr VM Provisioning
 
-This repository contains Ansible configuration for provisioning a Vultr VM.
+This repository contains Ansible configuration for provisioning a Vultr VM with automated CI/CD via GitHub Actions.
 
 ## Prerequisites
 
 - Ansible installed on your local machine
-- SSH access to your Vultr VM (207.148.116.91)
+- SSH access to your Vultr VM
 - SSH key configured for authentication
 
 ## Setup
 
-1. Ensure your SSH key is set up:
+1. Copy `.env.example` to `.env` and set your VM IP:
    ```bash
-   ssh-copy-id root@207.148.116.91
+   cp .env.example .env
+   # Edit .env and set VULTR_VM_IP
    ```
 
-2. Update `inventory.yml` if you use a different SSH key path
+2. Ensure your SSH key is set up:
+   ```bash
+   ssh-copy-id root@YOUR_VM_IP
+   ```
+
+3. Source environment variables before running playbooks:
+   ```bash
+   source .env
+   ```
 
 ## Quick Start
 
@@ -34,11 +43,6 @@ make provision
 Check syntax:
 ```bash
 make check
-```
-
-Install and configure HAProxy:
-```bash
-make haproxy
 ```
 
 ### Using Ansible directly
@@ -63,97 +67,47 @@ ansible-playbook provision.yml --check
 - `inventory.yml` - Ansible inventory with Vultr VM configuration
 - `ansible.cfg` - Ansible configuration
 - `provision.yml` - Main provisioning playbook
-- `haproxy.yml` - HAProxy installation and configuration playbook
-- `cloudflare-tunnel.yml` - Cloudflare Tunnel setup playbook
-- `templates/haproxy.cfg.j2` - HAProxy configuration template
-- `templates/cloudflared-config.yml.j2` - Cloudflare Tunnel configuration template
+- `cloudflare-tunnel.yml` - Cloudflare Tunnel setup playbook (quick tunnel with free domain)
 - `Makefile` - Common commands for easier usage
+- `.github/workflows/deploy.yml` - GitHub Actions CI/CD workflow
 
-## HAProxy Configuration
+## Cloudflare Quick Tunnel Setup
 
-The `haproxy.yml` playbook installs and configures HAProxy as a load balancer.
+Get a free Cloudflare tunnel URL (no account required!)
 
-### Configuration Variables
+### What is Quick Tunnel?
 
-Edit the following variables in `haproxy.yml`:
+Cloudflare Quick Tunnels provide temporary public URLs (`https://xxx-xxx-xxx.trycloudflare.com`) that tunnel to your local service. No authentication or Cloudflare account needed.
 
-- `haproxy_frontend_port`: Frontend port (default: 80)
-- `haproxy_stats_port`: Stats interface port (default: 8404)
-- `haproxy_stats_user`: Stats authentication username (default: admin)
-- `haproxy_stats_password`: Stats authentication password (default: changeme)
-- `backend_servers`: List of backend servers to load balance
+### Deploy
 
-Example backend server configuration:
+```bash
+ansible-playbook -i inventory.yml cloudflare-tunnel.yml
+```
+
+The playbook will:
+1. Install cloudflared
+2. Create a systemd service that runs `cloudflared tunnel --url localhost:5001`
+3. Display your free tunnel URL
+
+### Get Your Tunnel URL
+
+After deployment, SSH into your VM and check the logs:
+```bash
+journalctl -u cloudflared-quick -n 100 | grep trycloudflare.com
+```
+
+You'll see something like:
+```
+https://random-words-1234.trycloudflare.com
+```
+
+### Change Local Service Port
+
+Edit `cloudflare-tunnel.yml` and change:
 ```yaml
-backend_servers:
-  - name: web1
-    address: 192.168.1.10
-    port: 8080
-  - name: web2
-    address: 192.168.1.11
-    port: 8080
-```
-
-### Deploy HAProxy
-
-```bash
-make haproxy
-```
-
-### Access HAProxy Stats
-
-After deployment, access the stats interface at:
-```
-http://207.148.116.91:8404/stats
-```
-
-Default credentials: `admin` / `changeme` (change this in `haproxy.yml`)
-
-## Cloudflare Tunnel Setup
-
-Cloudflare Tunnel provides secure access to your services without exposing ports or using a public IP.
-
-### Prerequisites
-
-1. A Cloudflare account with a domain configured
-2. Access to Cloudflare Zero Trust dashboard
-
-### Setup Steps
-
-1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/)
-2. Navigate to Networks > Tunnels
-3. Click "Create a tunnel"
-4. Choose "Cloudflared" and give it a name (e.g., "vultr-tunnel")
-5. Copy the tunnel token provided
-
-### Deploy Cloudflare Tunnel
-
-1. Edit `cloudflare-tunnel.yml` and add your tunnel token:
-   ```yaml
-   tunnel_token: "your-token-here"
-   ```
-
-2. Run the playbook:
-   ```bash
-   make cloudflare-tunnel
-   ```
-
-### Configure Tunnel Routes
-
-After deployment, configure your tunnel routes in the Cloudflare dashboard:
-- Public Hostname: your-domain.com
-- Service: http://localhost:80 (HAProxy)
-
-For HAProxy stats:
-- Public Hostname: stats.your-domain.com
-- Service: http://localhost:8404
-
-### Verify Tunnel Status
-
-SSH into your VM and check:
-```bash
-systemctl status cloudflared
-journalctl -u cloudflared -f
+vars:
+  local_service_url: "localhost:YOUR_PORT"
 ```
 
 ## Customization
@@ -165,9 +119,41 @@ Edit `provision.yml` to add your own provisioning tasks such as:
 - Deploying applications
 - Managing users and permissions
 
+## GitHub Actions CI/CD
+
+This repo includes automated deployment via GitHub Actions.
+
+### Setup
+
+Add these secrets to your GitHub repo (Settings → Secrets and variables → Actions):
+
+1. **SSH_PRIVATE_KEY** - Your SSH private key to access the VM
+2. **VULTR_VM_IP** - Your Vultr VM IP address
+
+### How It Works
+
+Every push to `main`/`master` branch automatically:
+1. Installs Ansible
+2. Connects to your VM via SSH
+3. Runs the playbook
+
+### Manual Trigger
+
+Go to Actions tab → Deploy with Ansible → Run workflow
+
+## Security
+
+All secrets are stored as environment variables or GitHub Secrets.
+
+**Never commit:**
+- `.env` files
+- SSH keys
+- Passwords or tokens
+
 ## Troubleshooting
 
 If you encounter SSH issues:
-1. Verify you can SSH manually: `ssh root@207.148.116.91`
+1. Verify you can SSH manually: `ssh root@YOUR_VM_IP`
 2. Check your SSH key path in `inventory.yml`
 3. Ensure `host_key_checking = False` in `ansible.cfg` for first connection
+4. Make sure `VULTR_VM_IP` environment variable is set

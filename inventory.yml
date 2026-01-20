@@ -1,7 +1,7 @@
 all:
   hosts:
     vultr-vm:
-      ansible_host: 207.148.116.91
+      ansible_host: "{{ lookup('env', 'VULTR_VM_IP') }}"
       ansible_user: root
 
   vars:

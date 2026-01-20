@@ -35,5 +35,6 @@ jobs:
       - name: Run Ansible playbook
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
+          VULTR_VM_IP: ${{ secrets.VULTR_VM_IP }}
         run: |
           ansible-playbook -i inventory.yml cloudflare-tunnel.yml
